@@ -223,6 +223,40 @@ def create_video_with_moviepy(image_files, audio_files, output_path):
             clip.close()
         final_video.close()
 
+def save_script_to_file(script, script_path, slide_number):
+    """Saves the generated script to a text file."""
+    try:
+        with open(script_path, 'w', encoding='utf-8') as f:
+            f.write(script)
+        print(f"  - Script saved to: {script_path}")
+        return True
+    except Exception as e:
+        print(f"  - Error saving script for slide {slide_number}: {e}")
+        return False
+
+def load_script_from_file(script_path):
+    """Loads a script from a text file."""
+    try:
+        with open(script_path, 'r', encoding='utf-8') as f:
+            script = f.read().strip()
+        return script
+    except Exception as e:
+        print(f"  - Error loading script from {script_path}: {e}")
+        return None
+
+def should_regenerate_audio(script_path, audio_path):
+    """Checks if audio should be regenerated based on script modification time."""
+    if not os.path.exists(audio_path):
+        return True  # Audio doesn't exist, need to generate
+    
+    if not os.path.exists(script_path):
+        return False  # No script file, keep existing audio
+    
+    script_mtime = os.path.getmtime(script_path)
+    audio_mtime = os.path.getmtime(audio_path)
+    
+    return script_mtime > audio_mtime  # Regenerate if script is newer
+
 def main():
     if len(sys.argv) < 2:
         print("Usage: python auto_presenter.py <path_to_presentation.pptx>")
@@ -274,32 +308,60 @@ def main():
     audio_files = []
     successful_audio_count = 0
     
+    print(f"\n--- Processing {len(slide_images)} slides ---")
+    print("Note: You can edit script files in the temp folder and rerun to regenerate audio for modified scripts.")
+    
     for i, img_path in enumerate(slide_images):
         slide_num = i + 1
         audio_path = os.path.join(temp_dir, f"audio_{slide_num}.wav")
+        script_path = os.path.join(temp_dir, f"script_{slide_num}.txt")
 
-        if os.path.exists(audio_path):
-            print(f"\n--- Audio for slide {slide_num} already exists. Skipping. ---")
-            audio_files.append(audio_path)
-            successful_audio_count += 1
-            continue
+        # Load existing script or generate new one
+        script = None
+        if os.path.exists(script_path):
+            print(f"\n--- Loading existing script for slide {slide_num} ---")
+            script = load_script_from_file(script_path)
+            if script:
+                print(f"  - Script loaded from: {script_path}")
+                print(f"  - Script preview: {script[:100]}..." if len(script) > 100 else f"  - Script: {script}")
+            else:
+                print(f"  - Failed to load script, will generate new one")
         
-        script = generate_script_for_slide(vision_model, img_path, slide_num, len(slide_images))
-        
+        if not script:
+            script = generate_script_for_slide(vision_model, img_path, slide_num, len(slide_images))
+            if script:
+                save_script_to_file(script, script_path, slide_num)
+                print(f"  - Generated script: {script[:100]}..." if len(script) > 100 else f"  - Generated script: {script}")
+
+        # Check if we need to regenerate audio
         if script:
-            print(f"  - Generated script: {script[:100]}..." if len(script) > 100 else f"  - Generated script: {script}")
-            synthesized_audio = synthesize_speech_with_coqui(tts_engine, script, audio_path, slide_num)
-            if synthesized_audio:
+            if should_regenerate_audio(script_path, audio_path):
+                if os.path.exists(audio_path):
+                    print(f"  - Script modified, regenerating audio for slide {slide_num}")
+                else:
+                    print(f"Step 3: Synthesizing audio for slide {slide_num} (using local Coqui TTS)...")
+                
+                synthesized_audio = synthesize_speech_with_coqui(tts_engine, script, audio_path, slide_num)
+                if synthesized_audio:
+                    successful_audio_count += 1
+                audio_files.append(synthesized_audio)
+            else:
+                print(f"\n--- Audio for slide {slide_num} is up to date. Skipping synthesis. ---")
+                audio_files.append(audio_path)
                 successful_audio_count += 1
-            audio_files.append(synthesized_audio)
         else:
-            print(f"  - No script generated for slide {slide_num}")
+            print(f"  - No script available for slide {slide_num}")
             audio_files.append(None)
 
     print(f"\n--- Audio Generation Summary ---")
     print(f"  - Total slides: {len(slide_images)}")
     print(f"  - Successful audio files: {successful_audio_count}")
     print(f"  - Failed audio files: {len(slide_images) - successful_audio_count}")
+    
+    if successful_audio_count > 0:
+        print(f"\n--- Script Files Location ---")
+        print(f"  - Script files saved in: {temp_dir}")
+        print(f"  - You can edit script_*.txt files and rerun to regenerate audio")
 
     if successful_audio_count == 0:
         print("  - No audio files were created. Cannot generate video.")

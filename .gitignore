@@ -3,3 +3,5 @@ Java Arrays_temp_files
 *.mp4
 *.m4a
 *.mp3
+*_temp_files/
+script_*.txt
