@@ -1,0 +1,13 @@
+{
+  "name": "Auto-Presenter Codespace",
+  "image": "mcr.microsoft.com/devcontainers/python:3.11",
+  "features": {},
+  "postCreateCommand": "sudo apt-get update && sudo apt-get install -y libreoffice && pip install -r requirements.txt",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python"
+      ]
+    }
+  }
+}
