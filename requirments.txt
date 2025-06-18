@@ -1,0 +1,5 @@
+google-generativeai
+pyttsx3
+moviepy==1.0.3
+comtypes
+PyMuPDF
