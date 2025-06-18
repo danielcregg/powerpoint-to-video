@@ -22,16 +22,88 @@ def configure_gemini_vision_model(api_key):
         sys.exit(1)
     try:
         genai.configure(api_key=api_key)
-        vision_model_name = None
+        
+        # Get all available models that support vision/content generation
+        available_models = []
+        print("  - Available Gemini models:")
         for model in genai.list_models():
-            if 'flash' in model.name and 'generateContent' in model.supported_generation_methods:
-                vision_model_name = model.name
+            if 'generateContent' in model.supported_generation_methods:
+                available_models.append(model.name)
+                # Show model info if available
+                display_name = model.display_name if hasattr(model, 'display_name') else model.name
+                print(f"    • {model.name} ({display_name})")
+        
+        print(f"\n  - Found {len(available_models)} models with vision/content generation support")
+        
+        # Priority order for script generation - optimized for high request volume and quality
+        model_priorities = [
+            # Gemini 2.5 models (newest, most capable)
+            "models/gemini-2.5-flash",           # Latest Flash - best balance of speed/quality
+            "models/gemini-2.5-flash-lite-preview-06-17",  # Most cost-efficient, high throughput
+            "models/gemini-2.5-pro",             # Most capable but may have lower limits
+            
+            # Gemini 2.0 models
+            "models/gemini-2.0-flash",           # Next generation features
+            "models/gemini-2.0-flash-lite",     # Cost efficient with low latency
+            
+            # Gemini 1.5 models (proven and reliable)
+            "models/gemini-1.5-flash",           # Fast and versatile
+            "models/gemini-1.5-flash-8b",       # High volume, lower intelligence tasks
+            "models/gemini-1.5-flash-latest",   # Latest 1.5 Flash
+            "models/gemini-1.5-pro",            # Complex reasoning (but lower rate limits)
+        ]
+        
+        # Select the best available model based on priority
+        selected_model = None
+        for preferred_model in model_priorities:
+            if preferred_model in available_models:
+                selected_model = preferred_model
+                print(f"  - ✓ Selected: {selected_model}")
                 break
-        if not vision_model_name:
-            print("Error: Could not find a suitable Gemini Vision model.")
+        
+        if not selected_model:
+            # Fallback: use any model with key terms, prioritizing newer versions
+            fallback_keywords = ['2.5-flash', '2.0-flash', '1.5-flash', 'flash', 'pro']
+            for keyword in fallback_keywords:
+                for model_name in available_models:
+                    if keyword in model_name.lower():
+                        selected_model = model_name
+                        print(f"  - ✓ Fallback selected: {selected_model}")
+                        break
+                if selected_model:
+                    break
+        
+        if not selected_model:
+            print("Error: Could not find a suitable Gemini model for script generation.")
+            print(f"Available models: {available_models}")
             sys.exit(1)
-        print(f"  - Vision Model Found: {vision_model_name}")
-        return genai.GenerativeModel(model_name=vision_model_name)
+        
+        # Provide information about the selected model
+        model_info = ""
+        if "2.5" in selected_model:
+            if "flash-lite" in selected_model:
+                model_info = "(Gemini 2.5 Flash Lite - Most cost-efficient, high throughput)"
+            elif "flash" in selected_model:
+                model_info = "(Gemini 2.5 Flash - Latest with adaptive thinking)"
+            elif "pro" in selected_model:
+                model_info = "(Gemini 2.5 Pro - Enhanced reasoning, may have lower rate limits)"
+        elif "2.0" in selected_model:
+            if "flash-lite" in selected_model:
+                model_info = "(Gemini 2.0 Flash Lite - Cost efficient, low latency)"
+            elif "flash" in selected_model:
+                model_info = "(Gemini 2.0 Flash - Next generation features)"
+        elif "1.5" in selected_model:
+            if "flash-8b" in selected_model:
+                model_info = "(Gemini 1.5 Flash-8B - Optimized for high volume tasks)"
+            elif "flash" in selected_model:
+                model_info = "(Gemini 1.5 Flash - Fast and versatile)"
+            elif "pro" in selected_model:
+                model_info = "(Gemini 1.5 Pro - Complex reasoning, lower rate limits)"
+        
+        print(f"  - Model Type: {model_info}")
+        print(f"  - Perfect for batch processing PowerPoint presentations!")
+        
+        return genai.GenerativeModel(model_name=selected_model)
     except Exception as e:
         print(f"An error occurred during Gemini configuration: {e}")
         sys.exit(1)
