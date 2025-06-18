@@ -78,13 +78,23 @@ def extract_slides_as_images_linux(pptx_path, temp_folder):
     doc.close()
     return image_paths
 
-def generate_script_for_slide(vision_model, image_path, slide_number):
+def generate_script_for_slide(vision_model, image_path, slide_number, total_slides):
     """Generates a speaker script for a slide image using Gemini."""
     print(f"\nStep 2: Generating script for slide {slide_number} (using Gemini)...")
     try:
         slide_image = genai.upload_file(image_path)
+        
+        # Create context-aware prompts based on slide position
+        if slide_number == 1:
+            context_prompt = "This is the first slide of the presentation. You may greet the audience and introduce the topic."
+        elif slide_number == total_slides:
+            context_prompt = "This is the final slide of the presentation. Thank the audience, summarize key takeaways, or provide a professional closing."
+        else:
+            context_prompt = "This is a middle slide of the presentation. Continue the presentation flow without greetings or farewells."
+        
         prompt = [
             "You are a professional presenter. Write a clear and engaging speaker script for this slide.",
+            context_prompt,
             "Explain the key points as if presenting to an audience.",
             "Do not describe the slide's layout. Deliver the information directly.",
             "Keep the script under 150 words.",
@@ -106,12 +116,22 @@ def synthesize_speech_with_coqui(tts_engine, text, output_path, slide_number):
         print("  - Skipping audio synthesis due to empty script.")
         return None
     try:
+        print(f"  - Starting TTS synthesis for slide {slide_number}...")
         # Use tts method instead of to_file
         tts_engine.tts_to_file(text=text, file_path=output_path)
-        print(f"  - Audio file saved: {output_path}")
-        return output_path
+        print(f"  - TTS synthesis completed for slide {slide_number}")
+        if os.path.exists(output_path):
+            print(f"  - Audio file saved: {output_path}")
+            return output_path
+        else:
+            print(f"  - Error: Audio file was not created at {output_path}")
+            return None
+    except KeyboardInterrupt:
+        print(f"  - Process interrupted by user for slide {slide_number}")
+        return None
     except Exception as e:
         print(f"  - Error synthesizing speech for slide {slide_number}: {e}")
+        print(f"  - Error type: {type(e).__name__}")
         return None
 
 def create_video_with_moviepy(image_files, audio_files, output_path):
@@ -119,8 +139,11 @@ def create_video_with_moviepy(image_files, audio_files, output_path):
     print("\nStep 4: Creating video from images and audio with moviepy...")
     clips = []
     for img_path, audio_path in zip(image_files, audio_files):
-        if not os.path.exists(img_path) or not os.path.exists(audio_path):
-            print(f"  - Warning: Missing image or audio for a slide. Skipping.")
+        if not os.path.exists(img_path):
+            print(f"  - Warning: Missing image {img_path}. Skipping slide.")
+            continue
+        if not audio_path or not os.path.exists(audio_path):
+            print(f"  - Warning: Missing audio for {os.path.basename(img_path)}. Skipping slide.")
             continue
         try:
             audio_clip = AudioFileClip(audio_path)
@@ -134,13 +157,56 @@ def create_video_with_moviepy(image_files, audio_files, output_path):
 
     if not clips:
         print("  - No clips were created. Cannot generate video.")
+        print("  - This is likely due to TTS synthesis failures. Check the TTS errors above.")
         return
+
+    print(f"  - Created {len(clips)} video clips successfully")
     final_video = concatenate_videoclips(clips)
+    
     try:
-        final_video.write_videofile(output_path, fps=24, codec='libx264')
+        print(f"  - Writing video file: {output_path}")
+        # Use more compatible settings for containerized environments
+        final_video.write_videofile(
+            output_path, 
+            fps=24, 
+            codec='libx264',
+            audio_codec='aac',
+            temp_audiofile='temp-audio.m4a',
+            remove_temp=True,
+            verbose=False,
+            logger=None
+        )
         print(f"\nVideo successfully created: {output_path}")
+        
+        # Verify the file was created and has content
+        if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+            print(f"  - Video file size: {os.path.getsize(output_path)} bytes")
+        else:
+            print("  - Warning: Video file appears to be empty or missing")
+            
     except Exception as e:
         print(f"\nError writing final video file: {e}")
+        print("  - Trying alternative method...")
+        
+        # Try with different settings as fallback
+        try:
+            alt_output_path = output_path.replace('.mp4', '_alt.mp4')
+            final_video.write_videofile(
+                alt_output_path,
+                fps=24,
+                codec='mpeg4',
+                verbose=False,
+                logger=None
+            )
+            print(f"Alternative video created: {alt_output_path}")
+        except Exception as e2:
+            print(f"Alternative method also failed: {e2}")
+    
+    finally:
+        # Clean up clips to free memory
+        for clip in clips:
+            clip.close()
+        final_video.close()
 
 def main():
     if len(sys.argv) < 2:
@@ -173,6 +239,7 @@ def main():
         sys.exit(1)
 
     audio_files = []
+    successful_audio_count = 0
     
     for i, img_path in enumerate(slide_images):
         slide_num = i + 1
@@ -181,18 +248,33 @@ def main():
         if os.path.exists(audio_path):
             print(f"\n--- Audio for slide {slide_num} already exists. Skipping. ---")
             audio_files.append(audio_path)
+            successful_audio_count += 1
             continue
         
-        script = generate_script_for_slide(vision_model, img_path, slide_num)
+        script = generate_script_for_slide(vision_model, img_path, slide_num, len(slide_images))
         
         if script:
+            print(f"  - Generated script: {script[:100]}..." if len(script) > 100 else f"  - Generated script: {script}")
             synthesized_audio = synthesize_speech_with_coqui(tts_engine, script, audio_path, slide_num)
+            if synthesized_audio:
+                successful_audio_count += 1
             audio_files.append(synthesized_audio)
         else:
+            print(f"  - No script generated for slide {slide_num}")
             audio_files.append(None)
 
+    print(f"\n--- Audio Generation Summary ---")
+    print(f"  - Total slides: {len(slide_images)}")
+    print(f"  - Successful audio files: {successful_audio_count}")
+    print(f"  - Failed audio files: {len(slide_images) - successful_audio_count}")
+
+    if successful_audio_count == 0:
+        print("  - No audio files were created. Cannot generate video.")
+        sys.exit(1)
+
     video_output_path = os.path.abspath(os.path.join(base_dir, f"{file_name}_presentation.mp4"))
-    create_video_with_moviepy(image_files, audio_files, video_output_path)
+    print(f"\n--- Starting Video Creation ---")
+    create_video_with_moviepy(slide_images, audio_files, video_output_path)
         
     print("\nProcess finished successfully!")
 
