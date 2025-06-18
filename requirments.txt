@@ -1,5 +1,4 @@
 google-generativeai
-pyttsx3
+TTS
 moviepy==1.0.3
-comtypes
 PyMuPDF
