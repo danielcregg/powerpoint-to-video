@@ -1,3 +1,4 @@
+from dotenv import load_dotenv
 import os
 import sys
 import subprocess # New import for running command-line tools
@@ -8,8 +9,9 @@ from moviepy.editor import ImageClip, AudioFileClip, concatenate_videoclips
 import fitz # PyMuPDF
 
 # --- CONFIGURATION ---
+load_dotenv()
 # Your Gemini API Key for script generation
-GEMINI_API_KEY = "YOUR_GEMINI_API_KEY"
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 
 def configure_gemini_vision_model(api_key):
