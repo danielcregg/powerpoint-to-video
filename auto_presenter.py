@@ -141,13 +141,28 @@ def extract_slides_as_images_linux(pptx_path, temp_folder):
     pdf_path = os.path.join(temp_folder, pdf_filename)
     
     image_paths = []
-    doc = fitz.open(pdf_path)
-    for i, page in enumerate(doc):
-        pix = page.get_pixmap(dpi=300)
-        image_path = os.path.join(temp_folder, f"slide_{i + 1}.png")
-        pix.save(image_path)
-        image_paths.append(image_path)
-    doc.close()
+    
+    # Temporarily suppress MuPDF warnings about interactive elements
+    print("  - Extracting slide images from PDF...")
+    original_stderr = sys.stderr
+    try:
+        # Redirect stderr to suppress MuPDF warnings about Screen annotations
+        import io
+        sys.stderr = io.StringIO()
+        
+        doc = fitz.open(pdf_path)
+        for i, page in enumerate(doc):
+            pix = page.get_pixmap(dpi=300)
+            image_path = os.path.join(temp_folder, f"slide_{i + 1}.png")
+            pix.save(image_path)
+            image_paths.append(image_path)
+        doc.close()
+        
+    finally:
+        # Restore stderr
+        sys.stderr = original_stderr
+    
+    print(f"  - Successfully extracted {len(image_paths)} slide images")
     return image_paths
 
 def generate_script_for_slide(vision_model, image_path, slide_number, total_slides):
@@ -258,36 +273,53 @@ def create_video_with_moviepy(image_files, audio_files, output_path):
             
     except Exception as e:
         print(f"\nError writing final video file: {e}")
+        
+        # Remove the failed file if it exists
+        if os.path.exists(output_path):
+            try:
+                os.remove(output_path)
+                print(f"  - Removed failed video file: {output_path}")
+            except:
+                pass
+        
         print("  - Trying alternative H.264 method...")
         
-        # Try H.264 with simpler settings first
+        # Try H.264 with simpler settings - overwrite original file
         try:
-            alt_output_path = output_path.replace('.mp4', '_alt.mp4')
             final_video.write_videofile(
-                alt_output_path,
+                output_path,
                 fps=24,
                 codec='libx264',
                 preset='ultrafast',  # Faster encoding, larger file
                 verbose=False,
                 logger=None
             )
-            print(f"Alternative H.264 video created: {alt_output_path}")
+            print(f"Video successfully created with alternative H.264 settings: {output_path}")
         except Exception as e2:
             print(f"H.264 alternative failed: {e2}")
             print("  - Falling back to MP4V...")
-            # Final fallback to MP4V
+            
+            # Remove the failed file if it exists
+            if os.path.exists(output_path):
+                try:
+                    os.remove(output_path)
+                    print(f"  - Removed failed video file: {output_path}")
+                except:
+                    pass
+            
+            # Final fallback to MP4V - still use original filename
             try:
-                mp4v_output_path = output_path.replace('.mp4', '_mp4v.mp4')
                 final_video.write_videofile(
-                    mp4v_output_path,
+                    output_path,
                     fps=24,
                     codec='mpeg4',
                     verbose=False,
                     logger=None
                 )
-                print(f"MP4V video created: {mp4v_output_path}")
+                print(f"Video successfully created with MP4V codec: {output_path}")
             except Exception as e3:
                 print(f"All encoding methods failed: {e3}")
+                print(f"Could not create video file: {output_path}")
     
     finally:
         # Clean up clips to free memory
