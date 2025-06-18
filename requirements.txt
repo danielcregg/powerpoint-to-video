@@ -1,3 +1,4 @@
+python-dotenv
 google-generativeai
 TTS
 moviepy==1.0.3
