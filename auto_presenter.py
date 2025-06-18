@@ -186,21 +186,36 @@ def create_video_with_moviepy(image_files, audio_files, output_path):
             
     except Exception as e:
         print(f"\nError writing final video file: {e}")
-        print("  - Trying alternative method...")
+        print("  - Trying alternative H.264 method...")
         
-        # Try with different settings as fallback
+        # Try H.264 with simpler settings first
         try:
             alt_output_path = output_path.replace('.mp4', '_alt.mp4')
             final_video.write_videofile(
                 alt_output_path,
                 fps=24,
-                codec='mpeg4',
+                codec='libx264',
+                preset='ultrafast',  # Faster encoding, larger file
                 verbose=False,
                 logger=None
             )
-            print(f"Alternative video created: {alt_output_path}")
+            print(f"Alternative H.264 video created: {alt_output_path}")
         except Exception as e2:
-            print(f"Alternative method also failed: {e2}")
+            print(f"H.264 alternative failed: {e2}")
+            print("  - Falling back to MP4V...")
+            # Final fallback to MP4V
+            try:
+                mp4v_output_path = output_path.replace('.mp4', '_mp4v.mp4')
+                final_video.write_videofile(
+                    mp4v_output_path,
+                    fps=24,
+                    codec='mpeg4',
+                    verbose=False,
+                    logger=None
+                )
+                print(f"MP4V video created: {mp4v_output_path}")
+            except Exception as e3:
+                print(f"All encoding methods failed: {e3}")
     
     finally:
         # Clean up clips to free memory
@@ -211,6 +226,7 @@ def create_video_with_moviepy(image_files, audio_files, output_path):
 def main():
     if len(sys.argv) < 2:
         print("Usage: python auto_presenter.py <path_to_presentation.pptx>")
+        print("Example: python auto_presenter.py my_presentation.pptx")
         sys.exit(1)
     
     vision_model = configure_gemini_vision_model(GEMINI_API_KEY)
@@ -225,8 +241,25 @@ def main():
         sys.exit(1)
 
     input_pptx = os.path.abspath(sys.argv[1])
+    
+    # Better file validation
     if not os.path.exists(input_pptx):
         print(f"Error: File not found at {input_pptx}")
+        print("Please check the file path and ensure the file exists.")
+        
+        # Check if user provided a filename without extension
+        if not input_pptx.endswith('.pptx'):
+            suggested_path = input_pptx + '.pptx'
+            if os.path.exists(suggested_path):
+                print(f"Did you mean: {suggested_path}?")
+            else:
+                print("Note: The file should have a .pptx extension")
+        sys.exit(1)
+    
+    # Check file extension
+    if not input_pptx.lower().endswith('.pptx'):
+        print(f"Error: Expected a PowerPoint file (.pptx), but got: {input_pptx}")
+        print("This script only works with PowerPoint (.pptx) files.")
         sys.exit(1)
         
     base_dir = os.path.dirname(input_pptx)
