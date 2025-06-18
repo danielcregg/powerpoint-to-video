@@ -1,33 +1,35 @@
-# Auto-Presenter: PPTX to Narrated Video
+# Auto-Presenter: PPTX to Narrated Video (Cloud-Ready)
 
-[![Python Version](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![Works in Codespaces](https://img.shields.io/badge/GitHub-Codespaces-blue?logo=github)](https://github.com/features/codespaces)
+[![Python Version](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A powerful Python script that automates the entire process of converting a PowerPoint (`.pptx`) presentation into a fully narrated video (`.mp4`).
+A powerful, platform-independent Python script that automates the entire process of converting a PowerPoint (`.pptx`) presentation into a fully narrated video (`.mp4`).
 
-This project uses a hybrid approach, leveraging the best of online AI for content generation and robust offline tools for media creation, ensuring reliability and avoiding API rate limits for media synthesis.
+This project is designed to run in a cloud development environment like **GitHub Codespaces**, using a hybrid approach that leverages the best of online AI for content generation and robust offline tools for media creation.
 
 ## Core Features
 
--   **High-Fidelity Slide Extraction**: Uses Microsoft PowerPoint itself to convert `.pptx` slides into a PDF, ensuring perfect visual fidelity, then extracts them as high-resolution images.
+-   **Cross-Platform Slide Extraction**: Uses a headless instance of **LibreOffice** to convert `.pptx` slides into a PDF, ensuring perfect visual fidelity on any operating system.
 -   **AI-Powered Script Generation**: Sends each slide image to the **Google Gemini API** to generate a clear and engaging speaker script.
--   **Offline Text-to-Speech**: Utilizes the local `pyttsx3` engine to convert the generated scripts into audio narrations, avoiding TTS API rate limits and costs.
+-   **High-Quality Offline Text-to-Speech**: Utilizes the powerful **Coqui TTS** engine to convert scripts into natural-sounding audio narrations, avoiding API rate limits and costs.
+-   **Cloud-Ready with Dev Containers**: Comes with a pre-configured `.devcontainer` that automatically sets up the entire environment (LibreOffice, Python, all libraries) when launched in Codespaces.
 -   **Automatic Video Assembly**: Stitches the slide images and their corresponding audio files together into a final `.mp4` video using `moviepy`.
--   **Resilient & Intelligent**: The script is designed to be resumable. If it's interrupted, it will skip any slides it has already processed, saving time and API calls.
+-   **Resilient & Intelligent**: The script is resumable. If interrupted, it will skip any slides it has already processed, saving time and API calls.
 
 ## Workflow Diagram
 
-This diagram illustrates the end-to-end process automated by the script.
+This diagram illustrates the new, cross-platform architecture.
 
 ```mermaid
 graph TD
     A[Start] --> B{Input .pptx file};
-    B --> C[Use PowerPoint to Save as PDF];
+    B --> C[Use LibreOffice (headless) to Save as PDF];
     C --> D[Extract PDF pages as PNG images];
     D --> E{For each slide image...};
     E --> F[Send image to Gemini API];
     F --> G[Receive text script];
-    G --> H[Use local pyttsx3 to create .wav audio];
+    G --> H[Use local Coqui TTS to create .wav audio];
     E --> I{...Loop finished};
     I --> J[Combine all images and audio files];
     J --> K[Render final .mp4 video with moviepy];
@@ -36,91 +38,76 @@ graph TD
 
 ## Prerequisites
 
-Before you begin, ensure you have the following installed and configured:
-
-1.  **Windows Operating System**: This script uses COM automation, which requires Windows.
-2.  **Microsoft PowerPoint**: Must be installed on your machine for the initial PDF conversion step.
-3.  **Python**: Version 3.9 or newer is recommended.
-4.  **Google Gemini API Key**:
+1.  **GitHub Account**: Required to use GitHub Codespaces.
+2.  **Google Gemini API Key**:
     -   Go to [Google AI Studio](https://aistudio.google.com/).
     -   Click "Get API Key" and create a new key.
 
-## Installation & Setup
+## Installation & Setup (via GitHub Codespaces)
 
-Follow these steps to set up the project on your local machine. Using a virtual environment is strongly recommended to avoid conflicts with other projects.
+This project is optimized for a one-click setup using GitHub Codespaces.
 
-**1. Clone the Repository**
-```bash
-git clone https://github.com/your-username/your-repository-name.git
-cd your-repository-name
-```
+**1. Launch the Codespace**
+-   Navigate to the project's repository on GitHub.
+-   Click the green **`< > Code`** button.
+-   Go to the **Codespaces** tab and click **"Create codespace on main"**.
 
-**2. Create and Activate a Virtual Environment**
-This creates an isolated environment for the project's dependencies.
-```bash
-# Create the virtual environment
-python -m venv venv
+**2. Automatic Setup**
+-   Wait a few minutes while Codespaces builds your environment. It will automatically:
+    -   Install LibreOffice.
+    -   Install Python 3.11.
+    -   Install all necessary Python libraries from `requirements.txt`.
 
-# Activate it (you'll need to do this every time you work on the project)
-.\venv\Scripts\Activate.ps1
-```
-> **Note:** If you get an error about script execution being disabled, run `Set-ExecutionPolicy Unrestricted -Scope Process` and then try activating again.
-
-**3. Install Dependencies**
-This command uses the `requirements.txt` file to install all the necessary libraries into your active virtual environment.
-```bash
-pip install -r requirements.txt
-```
-
-**4. Configure API Key**
-Open the `auto_presenter.py` file in a text editor and find the configuration section at the top. Paste your Gemini API key into the variable.
+**3. Configure API Key**
+-   Once the Codespace has loaded, the `auto_presenter.py` file will be visible in the file explorer.
+-   Open it and find the configuration section at the top. Paste your Gemini API key into the variable.
 
 ```python
 # --- CONFIGURATION ---
 # Your Gemini API Key for script generation
 GEMINI_API_KEY = "YOUR_GEMINI_API_KEY_HERE"
 ```
-> **Security Warning:** Never commit your API key directly to a public GitHub repository. Ensure your `.gitignore` file includes the script if you've pasted in your key.
 
 ## Usage
 
-Once everything is set up, you can run the script from your terminal. Make sure your virtual environment is activated.
+Once the setup is complete, you can run the script from the terminal inside your Codespace.
 
-The script takes one argument: the path to your `.pptx` file.
+**1. Upload Your Presentation**
+-   Drag and drop your `.pptx` file from your computer into the file explorer on the left side of your Codespace.
+
+**2. Run the Script**
+-   In the Codespace terminal, run the script with the name of your presentation as the argument.
 
 ```bash
 # Example
 python auto_presenter.py "My Presentation.pptx"
-
-# Example with a path
-python auto_presenter.py "C:\Users\YourUser\Documents\Presentations\My Presentation.pptx"
 ```
 
-The script will create a temporary folder (`_temp_files`), generate all the assets, and output the final `.mp4` video in the same directory as your original presentation.
+**3. Download the Video**
+-   The script will create a temporary folder, generate all assets, and output the final `.mp4` video.
+-   Once finished, the `presentation.mp4` file will appear in your file explorer. Right-click it and select **Download** to save it to your local machine.
 
 ## How It Works: A Deeper Look
-
-The script's logic is broken down into several functions that interact with each other.
 
 ```mermaid
 sequenceDiagram
     participant User
     participant Script as auto_presenter.py
-    participant PowerPoint
+    participant LibreOffice (CLI)
     participant Gemini API
-    participant pyttsx3 Engine
+    participant Coqui TTS Engine
     participant moviepy
 
     User->>Script: Runs script with .pptx file
-    Script->>PowerPoint: Open .pptx and Save as .pdf
-    PowerPoint-->>Script: Returns control
+    Script->>LibreOffice (CLI): soffice --convert-to pdf ...
+    LibreOffice (CLI)-->>Script: Returns control
     Script->>Script: Extracts .png images from .pdf
     
     loop For each slide
         Script->>Gemini API: Sends slide.png
         Gemini API-->>Script: Returns speaker script (text)
-        Script->>pyttsx3 Engine: Sends text script
-        pyttsx3 Engine-->>Script: Saves audio.wav to disk
+        Script->>Coqui TTS Engine: Sends text script
+        Coqui TTS Engine-->>Script: Saves audio.wav to disk
     end
 
     Script->>moviepy: Provides all slide images and audio files
@@ -131,8 +118,8 @@ sequenceDiagram
 
 ## Troubleshooting
 
--   **`ModuleNotFoundError`**: This is the most common issue and is almost always caused by not having the virtual environment activated. Ensure you see `(venv)` at the start of your command prompt before running `pip install` or `python`. If the problem persists, your Python installation may be corrupted.
--   **COM Error / PowerPoint Error**: Ensure Microsoft PowerPoint is fully installed and that you are running the script on Windows.
+-   **Codespace Build Fails**: This can sometimes happen if there's a network issue during setup. Try rebuilding the codespace (from the Codespaces dashboard).
+-   `soffice command not found`: This means the LibreOffice installation failed during the Codespace build. Check the `postCreateCommand` in the `.devcontainer/devcontainer.json` file and rebuild.
 -   **API Errors**: Double-check that your Gemini API key is correctly pasted into the script.
 
 ## License
