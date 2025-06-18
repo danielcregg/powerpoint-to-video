@@ -106,7 +106,8 @@ def synthesize_speech_with_coqui(tts_engine, text, output_path, slide_number):
         print("  - Skipping audio synthesis due to empty script.")
         return None
     try:
-        tts_engine.to_file(text=text, file_path=output_path)
+        # Use tts method instead of to_file
+        tts_engine.tts_to_file(text=text, file_path=output_path)
         print(f"  - Audio file saved: {output_path}")
         return output_path
     except Exception as e:
