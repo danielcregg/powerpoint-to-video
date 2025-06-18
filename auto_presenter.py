@@ -1,11 +1,11 @@
 import os
 import sys
+import subprocess # New import for running command-line tools
 import time
 import google.generativeai as genai
-import pyttsx3
+from TTS.api import TTS # Using the high-quality offline TTS
 from moviepy.editor import ImageClip, AudioFileClip, concatenate_videoclips
-import comtypes.client
-import fitz
+import fitz # PyMuPDF
 
 # --- CONFIGURATION ---
 # Your Gemini API Key for script generation
@@ -34,41 +34,42 @@ def configure_gemini_vision_model(api_key):
         print(f"An error occurred during Gemini configuration: {e}")
         sys.exit(1)
 
-def get_powerpoint_application():
-    """Starts a PowerPoint application instance for PDF conversion."""
-    try:
-        app = comtypes.client.CreateObject("Powerpoint.Application")
-        app.Visible = 1
-        return app
-    except Exception as e:
-        print(f"Error: PowerPoint could not be started. Is it installed on this machine?")
-        sys.exit(1)
-
-def extract_slides_as_images(pptx_path, temp_folder, powerpoint_app):
+# --- NEW LINUX-COMPATIBLE FUNCTION ---
+def extract_slides_as_images_linux(pptx_path, temp_folder):
     """
-    Converts PPTX slides to PNG images via a PDF intermediate.
-    This uses PowerPoint because no pure Python library can render PPTX files accurately.
+    Converts PPTX slides to PNG images using LibreOffice on Linux.
+    This replaces the PowerPoint dependency.
     """
-    print("\nStep 1: Converting PPTX to images (using PowerPoint for PDF export)...")
+    print("\nStep 1: Converting PPTX to images (using LibreOffice for PDF export)...")
     if not os.path.exists(temp_folder):
         os.makedirs(temp_folder)
-    pdf_path = os.path.join(temp_folder, "temp.pdf")
+    
     try:
-        presentation = powerpoint_app.Presentations.Open(pptx_path, WithWindow=False)
-        presentation.SaveAs(pdf_path, 32) # 32 is the value for PDF format
-        presentation.Close()
-        print(f"  - Successfully converted PPTX to PDF.")
-    except Exception as e:
-        print(f"  - Error during PDF conversion: {e}")
+        # Construct the command to run LibreOffice in headless mode
+        command = [
+            "soffice", # The command for LibreOffice
+            "--headless",
+            "--convert-to", "pdf",
+            "--outdir", temp_folder,
+            pptx_path
+        ]
+        print(f"  - Running command: {' '.join(command)}")
+        # Execute the command
+        subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        print(f"  - Successfully converted PPTX to PDF using LibreOffice.")
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
+        print(f"  - Error during PDF conversion with LibreOffice: {e}")
+        print("  - Ensure LibreOffice is installed in your Codespace environment.")
         return None
-    finally:
-        powerpoint_app.Quit() # We are done with PowerPoint now and close it.
-        print("  - Closed PowerPoint application.")
 
+    # This part remains the same, as PyMuPDF is cross-platform
+    pdf_filename = os.path.splitext(os.path.basename(pptx_path))[0] + ".pdf"
+    pdf_path = os.path.join(temp_folder, pdf_filename)
+    
     image_paths = []
     doc = fitz.open(pdf_path)
     for i, page in enumerate(doc):
-        pix = page.get_pixmap(dpi=300) # High DPI for good video quality
+        pix = page.get_pixmap(dpi=300)
         image_path = os.path.join(temp_folder, f"slide_{i + 1}.png")
         pix.save(image_path)
         image_paths.append(image_path)
@@ -96,15 +97,14 @@ def generate_script_for_slide(vision_model, image_path, slide_number):
         print(f"  - Error generating script for slide {slide_number}: {e}")
         return None
 
-def synthesize_speech_with_pyttsx3(tts_engine, text, output_path, slide_number):
-    """Converts text to a WAV audio file using the offline pyttsx3 engine."""
-    print(f"Step 3: Synthesizing audio for slide {slide_number} (using local pyttsx3)...")
+def synthesize_speech_with_coqui(tts_engine, text, output_path, slide_number):
+    """Converts text to a WAV audio file using the offline Coqui TTS engine."""
+    print(f"Step 3: Synthesizing audio for slide {slide_number} (using local Coqui TTS)...")
     if not text:
         print("  - Skipping audio synthesis due to empty script.")
         return None
     try:
-        tts_engine.save_to_file(text, output_path)
-        tts_engine.runAndWait()
+        tts_engine.to_file(text=text, file_path=output_path)
         print(f"  - Audio file saved: {output_path}")
         return output_path
     except Exception as e:
@@ -112,17 +112,13 @@ def synthesize_speech_with_pyttsx3(tts_engine, text, output_path, slide_number):
         return None
 
 def create_video_with_moviepy(image_files, audio_files, output_path):
-    """
-    Creates a video by combining slide images and audio narrations using moviepy.
-    """
+    """Creates a video by combining slide images and audio narrations using moviepy."""
     print("\nStep 4: Creating video from images and audio with moviepy...")
-    
     clips = []
     for img_path, audio_path in zip(image_files, audio_files):
         if not os.path.exists(img_path) or not os.path.exists(audio_path):
             print(f"  - Warning: Missing image or audio for a slide. Skipping.")
             continue
-            
         try:
             audio_clip = AudioFileClip(audio_path)
             image_clip = ImageClip(img_path)
@@ -136,9 +132,7 @@ def create_video_with_moviepy(image_files, audio_files, output_path):
     if not clips:
         print("  - No clips were created. Cannot generate video.")
         return
-
     final_video = concatenate_videoclips(clips)
-    
     try:
         final_video.write_videofile(output_path, fps=24, codec='libx264')
         print(f"\nVideo successfully created: {output_path}")
@@ -152,12 +146,13 @@ def main():
     
     vision_model = configure_gemini_vision_model(GEMINI_API_KEY)
     
+    print("\n--- Initializing Local Coqui TTS Engine ---")
+    print("This may take a moment and will download model files on the first run...")
     try:
-        print("\n--- Initializing Local pyttsx3 Engine ---")
-        tts_engine = pyttsx3.init()
-        print("--- pyttsx3 Engine Initialized Successfully ---")
+        tts_engine = TTS("tts_models/en/ljspeech/vits")
+        print("--- Coqui TTS Engine Initialized Successfully ---")
     except Exception as e:
-        print(f"Error initializing pyttsx3: {e}")
+        print(f"Error initializing Coqui TTS: {e}")
         sys.exit(1)
 
     input_pptx = os.path.abspath(sys.argv[1])
@@ -169,9 +164,8 @@ def main():
     file_name = os.path.splitext(os.path.basename(input_pptx))[0]
     temp_dir = os.path.join(base_dir, f"{file_name}_temp_files")
     
-    powerpoint_app = get_powerpoint_application()
-    
-    slide_images = extract_slides_as_images(input_pptx, temp_dir, powerpoint_app)
+    # Call the new Linux-compatible function
+    slide_images = extract_slides_as_images_linux(input_pptx, temp_dir)
     if not slide_images:
         sys.exit(1)
 
@@ -189,13 +183,13 @@ def main():
         script = generate_script_for_slide(vision_model, img_path, slide_num)
         
         if script:
-            synthesized_audio = synthesize_speech_with_pyttsx3(tts_engine, script, audio_path, slide_num)
+            synthesized_audio = synthesize_speech_with_coqui(tts_engine, script, audio_path, slide_num)
             audio_files.append(synthesized_audio)
         else:
             audio_files.append(None)
 
     video_output_path = os.path.abspath(os.path.join(base_dir, f"{file_name}_presentation.mp4"))
-    create_video_with_moviepy(slide_images, audio_files, video_output_path)
+    create_video_with_moviepy(image_files, audio_files, video_output_path)
         
     print("\nProcess finished successfully!")
 
