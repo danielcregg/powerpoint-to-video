@@ -491,7 +491,7 @@ def main():
     
     for i, img_path in enumerate(slide_images):
         slide_num = i + 1
-        audio_path = os.path.join(temp_dir, f"audio_{slide_num}.wav")
+        audio_path = os.path.join(temp_dir, f"audio_{slide_num}.mp3") # Ensure MP3 extension
         script_path = os.path.join(temp_dir, f"script_{slide_num}.txt")
 
         # Load existing script or generate new one
