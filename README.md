@@ -5,10 +5,10 @@ Automatically convert PowerPoint presentations into narrated videos using AI-gen
 ## Features
 
 - **Cross-platform PowerPoint conversion** using LibreOffice (Linux compatible)
-- **AI-powered script generation** using Google's Gemini models
-- **Intelligent model selection** - automatically chooses the best available Gemini model
-- **High-quality offline text-to-speech** using Coqui TTS
-- **Editable scripts** - manually edit generated scripts and regenerate audio
+- **AI-powered script generation** using Google's Gemini models.
+- **Intelligent model selection** for script generation.
+- **High-quality text-to-speech** using Google's Gemini models (e.g., `gemini-2.5-flash-preview-tts`) via the `google-generativeai` SDK.
+- **Editable scripts** - manually edit generated scripts and regenerate audio.
 - **Incremental processing** - only regenerates content when scripts are modified
 - **Professional video output** with multiple codec fallbacks
 
@@ -24,11 +24,11 @@ graph TB
     F --> G{Script Files Exist?}
     G -->|No| H[Save New Scripts]
     G -->|Yes| I[Load Existing Scripts]
-    H --> J[Coqui TTS Synthesis]
+    H --> J[Gemini TTS Synthesis (google-generativeai)]
     I --> K{Scripts Modified?}
     K -->|Yes| J
     K -->|No| L[Use Existing Audio]
-    J --> M[Audio Files]
+    J --> M[Audio Files (.mp3)]
     L --> M
     M --> N[MoviePy Video Assembly]
     D --> N
@@ -38,9 +38,9 @@ graph TB
 ## Requirements
 
 - Python 3.11+
-- Google Gemini API key (free tier available)
-- LibreOffice (for PowerPoint conversion)
-- FFmpeg (for video encoding)
+- Google Gemini API key (set via `.env` file, used for both script generation and Text-to-Speech).
+- LibreOffice (for PowerPoint conversion).
+- FFmpeg (for video encoding).
 
 ## Installation
 
@@ -61,6 +61,7 @@ graph TB
     ```bash
     GEMINI_API_KEY=your_api_key_here
     ```
+   (This API key will be used for both script generation and Text-to-Speech)
 
 ## Usage
 
@@ -154,8 +155,7 @@ sequenceDiagram
     participant U as User
     participant S as Script
     participant L as LibreOffice
-    participant G as Gemini API
-    participant T as Coqui TTS
+    participant G_API as Gemini API (google-generativeai)
     participant M as MoviePy
 
     U->>S: Run with PowerPoint file
@@ -164,11 +164,11 @@ sequenceDiagram
     S->>S: Extract PNG images from PDF
     
     loop For each slide
-        S->>G: Send slide image for analysis
-        G->>S: Return generated script
+        S->>G_API: Send slide image for analysis (Gemini Vision)
+        G_API->>S: Return generated script
         S->>S: Save script to .txt file
-        S->>T: Convert script to audio
-        T->>S: Return WAV audio file
+        S->>G_API: Convert script to audio (Gemini TTS model)
+        G_API->>S: Return MP3 audio file
     end
     
     S->>M: Combine images and audio
@@ -176,11 +176,11 @@ sequenceDiagram
     S->>U: Video creation complete
 ```
 
-1. **PowerPoint Conversion**: LibreOffice converts `.pptx` → PDF → PNG images
-2. **Script Generation**: Gemini analyzes each slide image and generates contextual narration
-3. **Script Storage**: Scripts saved as editable `.txt` files in temp folder
-4. **Audio Synthesis**: Coqui TTS converts scripts to high-quality speech
-5. **Video Assembly**: MoviePy combines slides and audio into final video
+1. **PowerPoint Conversion**: LibreOffice converts `.pptx` → PDF → PNG images.
+2. **Script Generation**: A Gemini vision model (e.g., Gemini Flash) analyzes each slide image and generates contextual narration.
+3. **Script Storage**: Scripts are saved as editable `.txt` files in a temporary folder.
+4. **Audio Synthesis**: A Gemini Text-to-Speech model (e.g., `gemini-2.5-flash-preview-tts`) converts scripts to speech using the `google-generativeai` SDK.
+5. **Video Assembly**: MoviePy combines slide images and the generated MP3 audio files into the final video.
 
 ### 3. Smart Script Management
 
@@ -239,8 +239,8 @@ graph TD
     F --> I[slide_2.png]
     F --> J[script_1.txt]
     F --> K[script_2.txt]
-    F --> L[audio_1.wav]
-    F --> M[audio_2.wav]
+    F --> L[audio_1.mp3]
+    F --> M[audio_2.mp3]
     F --> N[presentation_presentation.mp4]
     
     style J fill:#e1f5fe
@@ -262,8 +262,8 @@ project/
     ├── slide_2.png
     ├── script_1.txt         # Editable scripts 📝
     ├── script_2.txt
-    ├── audio_1.wav          # Generated audio 🎵
-    ├── audio_2.wav
+    ├── audio_1.mp3          # Generated audio (MP3 format) 🎵
+    ├── audio_2.mp3
     └── presentation_presentation.mp4  # Final video 🎬
 ```
 
@@ -305,14 +305,25 @@ gantt
 
 ### TTS Voice Options
 
-The script uses Coqui TTS with LJSpeech model by default. To use different voices:
+The script uses Google's Gemini models for Text-to-Speech via the `google-generativeai` SDK.
+- **TTS Model**: Defaults to `models/gemini-2.5-flash-preview-tts`. This can be changed by modifying the `tts_gemini_model_name` variable in the `main()` function within `auto_presenter.py`.
+- **Voice Speaker**: Defaults to the prebuilt voice named `"Kore"`. This can be changed by modifying the `default_tts_voice_speaker` variable in `main()`, which is then passed to the `synthesize_speech_with_gemini_model` function.
 
+Example of changing the voice speaker in `auto_presenter.py`:
 ```python
-# In auto_presenter.py, modify the TTS initialization:
-tts_engine = TTS("tts_models/en/vctk/vits")  # Multi-speaker model
-# or
-tts_engine = TTS("tts_models/en/jenny/jenny")  # Different voice
+# In auto_presenter.py, at the beginning of the main() function:
+# tts_gemini_model_name = "models/gemini-2.5-pro-preview-tts" # If you want to try the Pro TTS model
+default_tts_voice_speaker = "Puck" # Change to another prebuilt voice like Puck
+
+# ... later in the loop ...
+synthesized_audio = synthesize_speech_with_gemini_model(
+    script, audio_path, slide_num,
+    tts_model_name=tts_gemini_model_name,
+    voice_speaker_name=default_tts_voice_speaker
+)
 ```
+
+The `google.generativeai.types.PrebuiltVoiceConfig` is used. Refer to the `google-generativeai` SDK documentation for available prebuilt voice names (like 'Kore', 'Puck', etc.) that can be used with the `voice_name` parameter in `PrebuiltVoiceConfig`. The example provided by the user also shows how `MultiSpeakerVoiceConfig` could be used for more complex scenarios, though this script currently implements single-speaker narration per slide.
 
 ## Troubleshooting
 
@@ -329,13 +340,11 @@ sudo apt-get install -y ffmpeg
 ```
 
 **Gemini API errors:**
-- Verify your API key in `.env`
-- Check rate limits (wait if exceeded)
-- Ensure billing is enabled for higher limits
-
-**TTS model download fails:**
-- Check internet connection
-- Clear Coqui cache: `rm -rf ~/.local/share/tts/`
+- Verify your `GEMINI_API_KEY` in `.env` is correct and has access to the required Gemini models (for both vision and TTS).
+- **Rate Limits:** Check if you've exceeded API rate limits for the Gemini models.
+- **Billing:** Ensure billing is enabled for your Google Cloud project associated with the API key if using paid tiers or models.
+- **Model Access:** Confirm that the specific Gemini TTS model (e.g., `models/gemini-2.5-flash-preview-tts`) is available to your API key. Preview models might have restricted access.
+- **Invalid Voice Speaker Name:** If you change `default_tts_voice_speaker`, ensure the name is valid according to `google-generativeai` SDK's `PrebuiltVoiceConfig` options.
 
 ### Performance Tips
 
@@ -358,7 +367,6 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## Acknowledgments
 
-- Google Gemini API for intelligent script generation
-- Coqui TTS for high-quality speech synthesis
-- LibreOffice for cross-platform PowerPoint conversion
-- MoviePy for video processing capabilities
+- Google Gemini API (via `google-generativeai` SDK) for intelligent script generation and Text-to-Speech.
+- LibreOffice for cross-platform PowerPoint conversion.
+- MoviePy for video processing capabilities.
