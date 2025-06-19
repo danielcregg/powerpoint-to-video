@@ -4,8 +4,6 @@ import sys
 import subprocess # New import for running command-line tools
 import time
 import google.generativeai as genai
-from google.generativeai import types as genai_types # For speech config
-from TTS.api import TTS # Using the high-quality offline TTS (Restored temporarily)
 from moviepy.editor import ImageClip, AudioFileClip, concatenate_videoclips
 import fitz # PyMuPDF
 
@@ -207,75 +205,43 @@ def generate_script_for_slide(script_model_instance, image_path, slide_number, t
         print(f"  - Error generating script for slide {slide_number}: {e}")
         return None
 
-def synthesize_speech_with_gemini_model(text_prompt, output_path, slide_number, tts_model_name="models/gemini-2.5-flash-preview-tts", voice_speaker_name="Kore"):
+def synthesize_speech_with_gemini_model(text_prompt, output_path, slide_number):
     """
-    Synthesizes speech from text using a Gemini model and saves it as an MP3 file.
+    Synthesizes speech from text using the Gemini 'gemini-2.5-flash-preview-tts' model and saves it as an MP3 file.
     """
-    print(f"\nStep 3: Synthesizing audio for slide {slide_number} (using Gemini TTS: {tts_model_name}, Voice: {voice_speaker_name})...")
+    tts_model_name = "models/gemini-2.5-flash-preview-tts"
+    print(f"\nStep 3: Synthesizing audio for slide {slide_number} (using Gemini TTS: {tts_model_name})...")
     if not text_prompt:
         print(f"  - Skipping audio synthesis for slide {slide_number} due to empty script.")
         return None
 
     try:
-        # Initialize the specific TTS model client here
-        # Assuming genai.configure() has already been called
+        # Initialize the specific TTS model client
         tts_model = genai.GenerativeModel(model_name=tts_model_name)
 
-        # For single speaker narration, we don't need MultiSpeakerVoiceConfig.
-        # We'll use a simpler SpeechConfig with a PrebuiltVoiceConfig.
-        speech_config = genai_types.SpeechConfig(
-            voice_config=genai_types.VoiceConfig(
-                prebuilt_voice_config=genai_types.PrebuiltVoiceConfig(
-                    voice_name=voice_speaker_name  # Example: 'Kore', 'Puck'
-                )
-            )
-        )
-
-        generation_config = genai_types.GenerationConfig(
-            response_modalities=["AUDIO"],
-            # Not explicitly setting response_mime_type here, assuming MP3 or a common format.
-            # If specific format is needed and supported, add: response_mime_type="audio/mp3"
-        )
-
+        # The API call for this TTS model requires specifying the response modality.
         response = tts_model.generate_content(
-            contents=text_prompt,
-            generation_config=generation_config,
-            speech_config=speech_config
+            text_prompt,
+            generation_config={"response_modalities": ["AUDIO"]}
         )
 
-        # Extract audio data
+        # Extract audio data from the response parts, not the 'audio_content' attribute.
         if response.candidates and response.candidates[0].content and response.candidates[0].content.parts:
-            audio_part = None
-            for part in response.candidates[0].content.parts:
-                if part.inline_data and part.inline_data.data: # Check if inline_data and its data field exist
-                    audio_part = part
-                    break
+            audio_data = response.candidates[0].content.parts[0].inline_data.data
+            with open(output_path, "wb") as out_file:
+                out_file.write(audio_data)
 
-            if audio_part:
-                audio_data = audio_part.inline_data.data
-                # The example implies audio data is directly in inline_data.data
-                # The mime_type might be available in audio_part.inline_data.mime_type if needed to confirm format
-                # For now, we assume it's MP3 compatible or raw audio MoviePy can handle with .mp3 extension.
-
-                with open(output_path, "wb") as out_file:
-                    out_file.write(audio_data)
-
-                print(f"  - TTS synthesis completed for slide {slide_number}")
-                if os.path.exists(output_path):
-                    print(f"  - Audio file saved: {output_path} (Format: MP3 assumed)")
-                    return output_path
-                else:
-                    print(f"  - Error: Audio file was not created at {output_path}")
-                    return None
+            print(f"  - TTS synthesis completed for slide {slide_number}")
+            if os.path.exists(output_path):
+                print(f"  - Audio file saved: {output_path} (Format: MP3 assumed)")
+                return output_path
             else:
-                print(f"  - Error: No audio data found in response for slide {slide_number}.")
-                if response.prompt_feedback:
-                    print(f"  - Prompt Feedback: {response.prompt_feedback}")
+                print(f"  - Error: Audio file was not created at {output_path}")
                 return None
         else:
-            print(f"  - Error: Invalid response structure or no candidates for slide {slide_number}.")
-            if response.prompt_feedback:
-                 print(f"  - Prompt Feedback: {response.prompt_feedback}")
+            print(f"  - Error: No audio data found in response for slide {slide_number}.")
+            if hasattr(response, 'prompt_feedback') and response.prompt_feedback:
+                print(f"  - Prompt Feedback: {response.prompt_feedback}")
             return None
 
     except Exception as e:
@@ -445,11 +411,6 @@ def main():
     selected_script_model_name = get_gemini_script_model() # Now returns name string directly
     script_generation_model = genai.GenerativeModel(model_name=selected_script_model_name)
 
-    # TTS Model Name - can be made configurable if needed
-    # Using the one from the user's example, ensuring "models/" prefix
-    tts_gemini_model_name = "models/gemini-2.5-flash-preview-tts"
-    # Default voice for TTS, can be customized
-    default_tts_voice_speaker = "Kore"
     # Note: The Coqui TTS engine (tts_engine) is no longer initialized or used.
 
     input_pptx = os.path.abspath(sys.argv[1])
@@ -517,9 +478,7 @@ def main():
                 # Note: synthesize_speech_with_gemini_model will print its own "Step 3" message
                 # and whether it's due to modification or first-time generation.
                 synthesized_audio = synthesize_speech_with_gemini_model(
-                    script, audio_path, slide_num,
-                    tts_model_name=tts_gemini_model_name,
-                    voice_speaker_name=default_tts_voice_speaker
+                    script, audio_path, slide_num
                 )
                 if synthesized_audio:
                     successful_audio_count += 1
