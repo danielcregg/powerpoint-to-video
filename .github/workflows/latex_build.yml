@@ -1,0 +1,42 @@
+name: Build LaTeX PDF
+
+on:
+  push:
+    branches:
+      - main # Or your default branch
+    paths:
+      - '**.tex' # Trigger only if .tex files change
+
+jobs:
+  build_latex:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Git repository
+        uses: actions/checkout@v4
+        with:
+          # Fetches all history for all branches and tags
+          fetch-depth: 0
+
+      - name: Compile LaTeX document
+        uses: xu-cheng/latex-action@v3
+        with:
+          root_file: white_paper.tex
+          compiler: pdflatex
+          args: -interaction=nonstopmode -file-line-error
+          # Add this if you have a bibliography
+          # bibtex_engine: bibtex
+
+      - name: Commit PDF file
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "docs: Auto-generate PDF from LaTeX"
+          file_pattern: white_paper.pdf
+          # Optional: Specify a different branch to commit to
+          # push_options: '--force' # Consider if you need to force push
+          # skip_dirty_check: true # Might be needed if other files change
+          # skip_fetch: true # latex-action already checked out
+          repository: . # Commit to the current repository
+          # Add a commit user and email
+          commit_user_name: GitHub Actions
+          commit_user_email: actions@github.com
+          commit_author: GitHub Actions <actions@github.com>
