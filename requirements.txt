@@ -3,3 +3,4 @@ google-generativeai
 TTS>=0.17.0
 moviepy==1.0.3
 PyMuPDF
+cloudmersive-convert-api-client

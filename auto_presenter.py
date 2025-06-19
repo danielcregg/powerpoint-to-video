@@ -12,6 +12,19 @@ import fitz # PyMuPDF
 load_dotenv()
 # Your Gemini API Key for script generation
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+# Your Cloudmersive API Key for document conversion (optional)
+CLOUDMERSIVE_API_KEY = os.getenv("CLOUDMERSIVE_API_KEY")
+
+# Attempt to import Cloudmersive, but don't fail if it's not installed
+# (though it should be if requirements.txt is used)
+try:
+    import cloudmersive_convert_api_client
+    from cloudmersive_convert_api_client.rest import ApiException as CloudmersiveApiException
+    CLOUDmersive_AVAILABLE = True
+except ImportError:
+    CLOUDmersive_AVAILABLE = False
+    CloudmersiveApiException = None # Define for type hinting if not available
+    print("Warning: cloudmersive_convert_api_client not found. API conversion will be disabled.")
 
 
 def configure_gemini_vision_model(api_key):
@@ -114,32 +127,75 @@ def extract_slides_as_images_linux(pptx_path, temp_folder):
     Converts PPTX slides to PNG images using LibreOffice on Linux.
     This replaces the PowerPoint dependency.
     """
-    print("\nStep 1: Converting PPTX to images (using LibreOffice for PDF export)...")
+    print("\nStep 1: Converting PPTX to images...")
     if not os.path.exists(temp_folder):
         os.makedirs(temp_folder)
-    
-    try:
-        # Construct the command to run LibreOffice in headless mode
-        command = [
-            "soffice", # The command for LibreOffice
-            "--headless",
-            "--convert-to", "pdf",
-            "--outdir", temp_folder,
-            pptx_path
-        ]
-        print(f"  - Running command: {' '.join(command)}")
-        # Execute the command
-        subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        print(f"  - Successfully converted PPTX to PDF using LibreOffice.")
-    except (subprocess.CalledProcessError, FileNotFoundError) as e:
-        print(f"  - Error during PDF conversion with LibreOffice: {e}")
-        print("  - Ensure LibreOffice is installed in your Codespace environment.")
-        return None
 
-    # This part remains the same, as PyMuPDF is cross-platform
     pdf_filename = os.path.splitext(os.path.basename(pptx_path))[0] + ".pdf"
     pdf_path = os.path.join(temp_folder, pdf_filename)
-    
+
+    # Check if PDF already exists
+    if os.path.exists(pdf_path):
+        print(f"  - Found existing PDF: {pdf_path}")
+        print(f"  - Skipping PDF creation.")
+    else:
+        pdf_created = False
+        # Try Cloudmersive API first if key is available
+        if CLOUDmersive_AVAILABLE and CLOUDMERSIVE_API_KEY and CLOUDMERSIVE_API_KEY != "YOUR_CLOUDMERSIVE_API_KEY":
+            print(f"  - PDF not found at {pdf_path}.")
+            print(f"  - Attempting conversion using Cloudmersive API...")
+            try:
+                configuration = cloudmersive_convert_api_client.Configuration()
+                configuration.api_key['Apikey'] = CLOUDMERSIVE_API_KEY
+                api_instance = cloudmersive_convert_api_client.ConvertDocumentApi(cloudmersive_convert_api_client.ApiClient(configuration))
+
+                with open(pptx_path, 'rb') as f_pptx:
+                    api_response = api_instance.convert_document_pptx_to_pdf(f_pptx)
+
+                with open(pdf_path, 'wb') as f_pdf:
+                    f_pdf.write(api_response)
+                print(f"  - Successfully converted PPTX to PDF using Cloudmersive API. Output: {pdf_path}")
+                pdf_created = True
+            except CloudmersiveApiException as e:
+                print(f"  - Cloudmersive API error during PDF conversion: {e}")
+                if "401" in str(e) or "Unauthorized" in str(e):
+                    print("  - Cloudmersive API key seems invalid. Check CLOUDMERSIVE_API_KEY.")
+                print(f"  - Falling back to LibreOffice conversion.")
+            except Exception as e:
+                print(f"  - Unexpected error during Cloudmersive API PDF conversion: {e}")
+                print(f"  - Falling back to LibreOffice conversion.")
+
+        if not pdf_created:
+            print(f"  - PDF not found at {pdf_path} or API conversion failed/skipped.")
+            print(f"  - Attempting conversion using LibreOffice...")
+            try:
+                # Construct the command to run LibreOffice in headless mode
+                command = [
+                    "soffice", # The command for LibreOffice
+                    "--headless",
+                    "--convert-to", "pdf",
+                    "--outdir", temp_folder,
+                    pptx_path
+                ]
+                print(f"  - Running command: {' '.join(command)}")
+                # Execute the command
+                subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                print(f"  - Successfully converted PPTX to PDF using LibreOffice. Output: {pdf_path}")
+            except (subprocess.CalledProcessError, FileNotFoundError) as e:
+                print(f"  - Error during PDF conversion with LibreOffice: {e}")
+                print("  - Ensure LibreOffice is installed and in PATH.")
+                print("  - PPTX to PDF conversion failed. Cannot proceed.")
+                return None
+
+        if not os.path.exists(pdf_path):
+            print(f"  - Error: PDF conversion did not produce the expected file at {pdf_path}")
+            actual_files = os.listdir(temp_folder)
+            print(f"  - Files currently in temp_folder '{temp_folder}': {actual_files}")
+            pdf_files_in_temp = [f for f in actual_files if f.lower().endswith('.pdf')]
+            if pdf_files_in_temp:
+                print(f"  - Found PDF files: {pdf_files_in_temp}. Expected '{pdf_filename}'.")
+            return None
+
     image_paths = []
     
     # Temporarily suppress MuPDF warnings about interactive elements
