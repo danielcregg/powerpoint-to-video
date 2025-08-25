@@ -1,0 +1,37 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+}
+
+@layer base {
+  body {
+    @apply bg-gray-50 text-gray-900 font-sans;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-primary-600 hover:bg-primary-700 focus:ring-primary-500 focus:ring-offset-2 text-white font-medium py-2 px-4 rounded-lg transition-colors focus:outline-none focus:ring-2;
+  }
+  
+  .btn-secondary {
+    @apply bg-gray-200 hover:bg-gray-300 focus:ring-gray-500 focus:ring-offset-2 text-gray-900 font-medium py-2 px-4 rounded-lg transition-colors focus:outline-none focus:ring-2;
+  }
+  
+  .card {
+    @apply bg-white rounded-xl shadow-sm border border-gray-200 p-6;
+  }
+  
+  .progress-bar {
+    @apply w-full bg-gray-200 rounded-full h-2.5;
+  }
+  
+  .progress-fill {
+    @apply bg-primary-600 h-2.5 rounded-full transition-all duration-300 ease-out;
+  }
+}

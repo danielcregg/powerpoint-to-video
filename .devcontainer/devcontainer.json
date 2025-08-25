@@ -1,13 +1,45 @@
 {
-  "name": "Auto-Presenter Codespace",
+  "name": "PowerPoint to Video - Full Stack",
   "image": "mcr.microsoft.com/devcontainers/python:3.11",
-  "features": {},
-  "postCreateCommand": "sudo apt-get update && sudo apt-get install -y libreoffice espeak-ng && pip install -r requirements.txt",
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "18"
+    },
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },
+  "postCreateCommand": "sudo apt-get update && sudo apt-get install -y libreoffice espeak-ng ffmpeg && pip install -r requirements.txt && pip install -r backend/requirements.txt && cd frontend && npm install",
   "customizations": {
     "vscode": {
       "extensions": [
-        "ms-python.python"
-      ]
+        "ms-python.python",
+        "ms-python.autopep8",
+        "ms-python.black-formatter",
+        "bradlc.vscode-tailwindcss",
+        "esbenp.prettier-vscode",
+        "ms-vscode.vscode-typescript-next",
+        "ms-vscode.vscode-json"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "python.linting.enabled": true,
+        "python.linting.pylintEnabled": true,
+        "python.formatting.provider": "black",
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+          "source.organizeImports": true
+        }
+      }
+    }
+  },
+  "forwardPorts": [3000, 8000],
+  "portsAttributes": {
+    "3000": {
+      "label": "React Frontend",
+      "onAutoForward": "notify"
+    },
+    "8000": {
+      "label": "FastAPI Backend",
+      "onAutoForward": "notify"
     }
   }
 }
